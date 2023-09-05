@@ -1,0 +1,337 @@
+---
+title: "EHDI Website - Figuring out figures - v1"
+author: "Veronica Chaitan"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+    html_document:
+      plots: 
+        style: Normal
+        align: left
+      page_margins:
+        bottom: 1
+        top: 1
+        right: 1
+        left: 1
+        header: 0.5
+        footer: 0.5
+        gutter: 0
+      page_size:
+        width: 8.5
+        height: 11
+        orient: "portrait"
+    fig_caption: TRUE
+    df_print: kable
+    fig_height: 2.5
+    fig_width: 4
+always_allow_html: TRUE
+editor_options: 
+  chunk_output_type: console
+---
+[//]: # CSS style arguments
+
+<style type="text/css">
+
+@import url("https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700,700i&display=swap");
+
+h1, h2, h3, h4, h5, body, ul, ol, p, td, th {
+font-family: 'Open Sans', sans-serif;
+
+}
+
+
+body{ /* Normal  */
+      font-size: 20px;
+      counter-reset:table figure;
+  }
+
+.table{
+  width:auto;
+  font-size:12px;
+}
+
+td, th{
+  padding-left:10px;
+  text-align: right;
+  font-family: 'Open Sans', sans-serif;
+}
+
+caption::before{
+  counter-increment: table;
+  content: "Table " counter(table) ": ";
+}
+
+.caption::before{
+  counter-increment: figure;
+  content: "Figure " counter(figure) ": ";
+}
+
+caption, .caption{
+  font-style:italic;
+  font-size: 16px;
+  margin-top:0.5em;
+  margin-bottom:0.5em;
+  width:80%;
+  text-align: left;
+}
+
+#TOC {
+  font-size: 17px;
+  width: 100%;
+}
+
+</style>
+
+```{r setup, include=FALSE}
+
+# You can set a default figure size here so you don't have to customize every time
+knitr::opts_chunk$set(fig.width=8, fig.height=6, warning=FALSE, message=FALSE, cache=FALSE, echo=FALSE)
+
+```
+
+```{r}
+
+# '# PROLOG   ##################################################################'
+# '#                                                                           #'
+# '# PROJECT: GCATS                                                            #'
+# '# PURPOSE: To explore 2018 and 2022 GCATS data for menthol report           #'
+# '# DIR:     Box\CPHSS\GCATS\Analysis                                         #'
+# '#                                                                           #'
+# '# DATA:    Box\CPHSS\GCATS\Data\Data_ValueLabels\GCATS18_FullSample.csv     #'
+# '#          Box\CPHSS\GCATS\Data\Data_ValueLabels\GCATS22_FullSample.csv     #'
+# '# AUTHOR:  Jessica Price & Veronica L Chaitan                               #'
+# '# CREATED: Aug 09, 2023                                                     #'
+# '# LATEST:  AUG 09, 2023                                                     #'
+# '# NOTES:                                                                    #'
+# '#                                                                           #'
+# '# PROLOG   ##################################################################'
+
+library(crosstalk)
+library(plotly)
+library(kableExtra)
+library(magrittr)
+library(tidyverse)
+
+# for NA in kable
+options(knitr.kable.NA = "")
+
+# Theme settings
+# theme_set(theme_minimal()) - doesn't carry over across chunks in RMD
+# In general
+mytheme <- theme_minimal() + 
+  theme(text = element_text(size=11, color="gray23"),
+        panel.grid = element_blank(),
+        axis.text.x = element_text(size=8, color="gray23"),
+        axis.text.y = element_text(size=10, color="gray23"),
+        axis.title = element_blank(),
+        plot.title = element_blank(),
+        legend.position = "top",
+        legend.title = element_blank())
+
+# Read in the latest dataset
+r <- read_csv("../website_ready_data/Final_merged_all_data_v7.csv") %>%
+  # remove National sum
+  filter(State != "National Sum")
+  
+
+# Read in the states to get states abbr
+states <- read_csv("../website_ready_data/states.csv")
+
+# Order the states
+r <- r %>%
+  mutate(State = factor(State,
+                        levels=c("National Average",sort(unique(states$State))))) 
+
+# Get rid of infinite...
+r <- r %>%
+  mutate(PerLTF=case_when(is.infinite(PerLTF)~NA_real_,
+                          TRUE~PerLTF),
+         PerD=case_when(is.infinite(PerD)~NA_real_,
+                          TRUE~PerD))
+
+
+# State codes
+r <- r %>%
+  # Joining with `by = join_by(State)`
+  left_join(states)
+
+
+
+# Account for missing states as NA?
+
+# Make a tibble with every state and year
+stateyear <- tibble(State=rep(unique(r$State),7),
+                    Year=c(rep(2014,52),rep(2015,52),rep(2016,52),
+                           rep(2017,52),rep(2018,52),rep(2019,52),
+                           rep(2020,52))) %>%
+  mutate(stateyear = paste0(State,Year) )
+  
+
+r <- r %>% 
+  # Make a column to match
+  mutate(stateyear = paste0(State,Year) ) %>%
+  # Add in the missing states in each year
+  bind_rows(stateyear %>% filter(!stateyear %in% r$stateyear)) %>%
+  # Remove the stateyear
+  select(-c(stateyear))
+
+
+# Long format for mapping
+r1 <- r %>% 
+  pivot_longer(-c(State,YearID,Year,Abbrev,Code)) %>%
+  left_join(states) %>%
+  # Order the states
+  mutate(State = factor(State,
+                        levels=c("National Average",sort(unique(states$State)))))
+
+
+# Read in the latest file on the missing data
+
+missing <- read_csv("../website_ready_data/missing_data_table_combined_v3.csv")
+## THIS WILL NEED DESCRIPTIVES TOO!!
+
+```
+
+
+
+<!-- We want tabs so we first need to have text as a heading, add the tabset feature here. Then anything else added as a heading under it will be under the tab! Arguments are .tabset-pills and .tabset-fade --> 
+
+<br>
+
+# EHDI DATA HUB {.tabset}
+<br>
+
+## Thoughts to move us forward
+
+- Need to pull in descriptive terms and to order the variables! 
+
+- We can store the annotations, terms, etc in a single Word file to read in.
+
+- In our website plan we split raw and calculated variables. Do we want to make separate figures for them here? That sounds easier than adding another filter. Or maybe it's okay now that we know how to do it. 
+
+## State trends over time 
+
+- Select the measurement at the top to see how states compare over time, 2014-2020.
+
+- Hover over a line to highlight that state. 
+
+- Double-click a state on the right to focus on that state. Click another to compare. Double-click to reset.
+
+
+
+```{r}
+
+#https://plotly-r.com/client-side-linking.html
+
+# initializing a crosstalk shared data object  
+plotdat <- highlight_key(r1)  # long data here
+
+# Filter dropdown
+question_filter <- crosstalk::filter_select(
+   "filter", "Select a variable to examine",
+   plotdat, ~name, multiple = F
+)
+
+# Plotting:
+plot <-  plot_ly(plotdat, 
+    x = ~Year, y = ~value, split = ~State, text = ~name,
+    # type="scatter", 
+    mode = "line",
+    textposition = "top"
+  ) %>%
+  group_by(State) %>%
+  # Add in some highlighting features to see if it works and increases interactivity.
+    highlight(on = "plotly_hover", off = 'plotly_doubleclick',
+              selectize = FALSE, # dropdown widget
+              dynamic = FALSE,  # control highlighting color
+              persistent = FALSE  # retain previous selections
+    )
+
+# Found this code here: https://stackoverflow.com/questions/64234585/selecting-a-default-value-in-an-r-plotly-plot-using-a-selectize-box-via-crosstal
+# Will need to see if it works or not embedded in a website...
+# Just putting things together for easy display:
+shiny::tags$div(class = 'flexbox',
+                question_filter,
+                shiny::tags$br(),
+                plot)
+
+
+```
+
+
+## Annual map comparison
+
+With this code we can map to a state the results of a variable in a year. Users can select a single variable and a single year.
+
+```{r}
+
+# In case the figures end up trying to speak with one another, we'll just make
+# new objects here. 
+
+# Establish a SharedData object to use. 
+# The key here appears to be not having a key specified at all.
+r1SD <- highlight_key(r1)
+
+# Set up the widgets to be used for the mapping
+widgets <- 
+  # We can split the space occupied by each widget for easier viewing - total is 12
+  bscols(widths = c(8, 4),
+         # Create a select filter for the variable
+         filter_select("variableselect", "Please select measurement here", r1SD, ~name, multiple = F),
+         # Create a select filter for the year - seems the only filter to select single year
+         filter_select("yearselect", "Please select year here", r1SD, ~Year, multiple = F)
+  )
+
+# Now display the connected items - embed all in the bs rather than more objects
+bscols(
+  widths=(12),  # max is 12 so both elements should fit the width 
+  widgets,
+  # Plot a map of the SharedData object
+  r1SD %>%
+    plot_geo(locationmode = 'USA-states') %>% # Set the location to states
+    # group_by(name,Year) %>%  # I don't think we need this here
+    add_trace(locations=~Code, # must be state abbreviation
+              z=~value,color=~value, # we want to see the map colored by the value
+              text=~c(Year)) %>%  # nice way to verify when looking at a map that the year is as intended
+    layout(
+      # Change the view to be specific to the US
+      geo = list(scope = 'usa',
+                 projection = list(type = 'albers usa'),
+                 lakecolor = toRGB('white')
+      )) 
+)
+
+
+```
+
+
+
+I think the next step we can take here, once we have more information and also the know-how, is to include automatically populated annotations at the bottom of the figure that describes the missing data.
+
+<br>
+
+## Missing data
+
+We can pull in that missing data table and format it here likely.
+
+The table below notes the years of missing data for each state and each variable. For example, data was unavailable for Alabama in 2014 on the number of babies who failed inpatient screening and were referred straight to diagnostics (ReInStDia). 
+
+```{r}
+
+kable(missing %>%
+        rename(Measurement=Variable),
+      # Align all text to the left
+      align="l")  %>%
+  # Let's identify the variables a little better
+  column_spec(1, bold = T) %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive","bordered"),
+                full_width = F)
+
+```
+
+## Data sources
+
+We can document this here or in a webpage tab.
+
+## How to use the data/site
+
+We can document this here or in a webpage tab. 
